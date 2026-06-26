@@ -12,7 +12,7 @@ jobs:
       - name: Install Package
         uses: ConorMacBride/install-package@v1.1.0
         with:
-          apt: libxml2 zlib1g zlib1g-dev openssl libssl-dev liblz4-dev liblzma-dev pkg-config automake libtool gettext
+          apt: libxml2 zlib1g zlib1g-dev openssl libssl-dev liblz4-dev liblzma-dev libicu-dev g++ pkg-config automake libtool gettext
 
       - name: Setup Node.js
         uses: actions/setup-node@v4.0.2

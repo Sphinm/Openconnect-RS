@@ -112,7 +112,7 @@ jobs:
 
   build-mac-x64:
     name: macOS x64 (Tauri GUI + CLI)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - uses: ConorMacBride/install-package@v1.1.0
         with:
@@ -165,7 +165,7 @@ jobs:
     steps:
       - uses: ConorMacBride/install-package@v1.1.0
         with:
-          apt: libxml2 zlib1g zlib1g-dev openssl libssl-dev liblz4-dev liblzma-dev pkg-config automake libtool gettext
+          apt: libxml2 zlib1g zlib1g-dev openssl libssl-dev liblz4-dev liblzma-dev libicu-dev g++ pkg-config automake libtool gettext
 
       - uses: actions/checkout@v4
 
@@ -197,6 +197,12 @@ jobs:
       - build-mac-aarch64
       - build-mac-x64
       - build-linux
+    if: >-
+      always() && !cancelled() &&
+      (needs.build-windows.result == 'success' ||
+       needs.build-mac-aarch64.result == 'success' ||
+       needs.build-mac-x64.result == 'success' ||
+       needs.build-linux.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -206,7 +212,12 @@ jobs:
           merge-multiple: true
 
       - name: List release assets
-        run: ls -lah release-files/
+        run: |
+          if [ ! -d release-files ] || [ -z "$(ls -A release-files)" ]; then
+            echo "No release artifacts found"
+            exit 1
+          fi
+          ls -lah release-files/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

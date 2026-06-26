@@ -82,8 +82,17 @@ fn main() {
         println!("cargo:rustc-link-search=/usr/local/lib");
         println!("cargo:rustc-link-search=/usr/lib");
         println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu");
-        // TODO: for stdc++, optimize auto search
-        println!("cargo:rustc-link-search=/usr/lib/gcc/x86_64-linux-gnu/11");
+        if let Ok(output) = std::process::Command::new("gcc")
+            .arg("-print-file-name=libstdc++.a")
+            .output()
+        {
+            let lib_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if lib_path != "libstdc++.a" {
+                if let Some(dir) = PathBuf::from(&lib_path).parent() {
+                    println!("cargo:rustc-link-search={}", dir.display());
+                }
+            }
+        }
 
         // link for openssl
         println!("cargo:rustc-link-lib=static=crypto");
