@@ -1,4 +1,6 @@
 #!/bin/sh
+# Collect CI artifacts locally (optional). Tag releases are published automatically by
+# .github/workflows/release.yml via softprops/action-gh-release.
 
 CURRENT_DIR=$(pwd)
 
@@ -30,8 +32,14 @@ download() {
 
     echo "Renaming the GUI binaries..."
     if [ -d "./artifacts/openconnect-win" ]; then
-        mv ./artifacts/openconnect-win/msi/*.msi ./artifacts/openconnect-win/msi/openconnect-gui_win-x86_64.msi
-        mv ./artifacts/openconnect-win/nsis/*.exe ./artifacts/openconnect-win/nsis/openconnect-gui_win-x86_64.exe
+        if [ -f "./artifacts/openconnect-win/native/openconnect-gui-win.exe" ]; then
+            cp ./artifacts/openconnect-win/native/openconnect-gui-win.exe \
+                ./artifacts/openconnect-win/openconnect-gui-win-x86_64.exe
+        fi
+        if [ -d "./artifacts/openconnect-win/nsis" ]; then
+            mv ./artifacts/openconnect-win/msi/*.msi ./artifacts/openconnect-win/msi/openconnect-gui_win-x86_64.msi 2>/dev/null || true
+            mv ./artifacts/openconnect-win/nsis/*.exe ./artifacts/openconnect-win/nsis/openconnect-gui_win-x86_64.exe 2>/dev/null || true
+        fi
     fi
     echo ""
 

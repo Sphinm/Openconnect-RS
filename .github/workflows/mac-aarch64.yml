@@ -2,9 +2,6 @@ name: Mac ARM64 Build
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - v*
   pull_request:
     branches: ["main"]
 

@@ -1,0 +1,215 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Windows x64 (native GUI)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          update: true
+          path-type: inherit
+          install: >-
+            git curl make zip base-devel mingw-w64-x86_64-toolchain
+            automake libtool gettext autotools pkg-config
+            openssl openssl-devel mingw-w64-x86_64-openssl
+            libxml2 libxml2-devel mingw-w64-x86_64-libxml2
+            libiconv libiconv-devel mingw-w64-x86_64-libiconv
+            zlib zlib-devel mingw-w64-x86_64-zlib
+            liblz4 liblz4-devel mingw-w64-x86_64-lz4
+            liblzma liblzma-devel mingw-w64-x86_64-xz
+            icu icu-devel mingw-w64-x86_64-icu
+          pacboy: toolchain:p
+
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-gnu
+          cache: true
+
+      - name: Build native GUI
+        run: |
+          rustup override set stable-x86_64-pc-windows-gnu
+          cargo build -p openconnect-gui-win --release
+          mkdir -p release-assets
+          cp ./target/release/openconnect-gui-win.exe release-assets/openconnect-gui-win-x86_64.exe
+          if [ -f ./wintun/wintun.dll ]; then
+            cp ./wintun/wintun.dll release-assets/wintun.dll
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets/
+          if-no-files-found: error
+
+  build-mac-aarch64:
+    name: macOS ARM64 (Tauri GUI + CLI)
+    runs-on: macos-14
+    steps:
+      - uses: ConorMacBride/install-package@v1.1.0
+        with:
+          brew: libxml2 zlib openssl pkg-config automake libtool gettext zip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ">=20"
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          run_install: false
+          package_json_file: ./crates/openconnect-gui/package.json
+          version: 8
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+          cache: true
+
+      - name: Build Tauri GUI
+        run: |
+          cd ./crates/openconnect-gui
+          pnpm install
+          pnpm tauri build --bundles dmg,app
+
+      - name: Build CLI
+        run: cargo build --release -p openconnect-cli
+
+      - name: Package release assets
+        run: |
+          mkdir -p release-assets
+          cp ./target/release/openconnect-cli release-assets/openconnect-cli_osx-aarch64
+          chmod +x release-assets/openconnect-cli_osx-aarch64
+          DMG=$(ls ./target/release/bundle/dmg/*.dmg | head -1)
+          cp "$DMG" release-assets/openconnect-gui_osx-aarch64.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-mac-aarch64
+          path: release-assets/
+          if-no-files-found: error
+
+  build-mac-x64:
+    name: macOS x64 (Tauri GUI + CLI)
+    runs-on: macos-13
+    steps:
+      - uses: ConorMacBride/install-package@v1.1.0
+        with:
+          brew: libxml2 zlib openssl pkg-config automake libtool gettext zip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ">=20"
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          run_install: false
+          package_json_file: ./crates/openconnect-gui/package.json
+          version: 8
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-apple-darwin
+          cache: true
+
+      - name: Build Tauri GUI
+        run: |
+          cd ./crates/openconnect-gui
+          pnpm install
+          pnpm tauri build --bundles dmg,app
+
+      - name: Build CLI
+        run: cargo build --release -p openconnect-cli
+
+      - name: Package release assets
+        run: |
+          mkdir -p release-assets
+          cp ./target/release/openconnect-cli release-assets/openconnect-cli_osx-x86_64
+          chmod +x release-assets/openconnect-cli_osx-x86_64
+          DMG=$(ls ./target/release/bundle/dmg/*.dmg | head -1)
+          cp "$DMG" release-assets/openconnect-gui_osx-x86_64.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-mac-x64
+          path: release-assets/
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux x64 (CLI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ConorMacBride/install-package@v1.1.0
+        with:
+          apt: libxml2 zlib1g zlib1g-dev openssl libssl-dev liblz4-dev liblzma-dev pkg-config automake libtool gettext
+
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          cache: true
+
+      - name: Build CLI
+        run: cargo build --release -p openconnect-cli
+
+      - name: Package release assets
+        run: |
+          mkdir -p release-assets
+          cp ./target/release/openconnect-cli release-assets/openconnect-cli_linux-x86_64
+          chmod +x release-assets/openconnect-cli_linux-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release-assets/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - build-windows
+      - build-mac-aarch64
+      - build-mac-x64
+      - build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-files
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lah release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-files/*
