@@ -1,0 +1,6 @@
+#include <windows.h>
+
+// Application manifest
+// 1: requires Common Controls v6 for themed controls on Win10/Win11
+// 2: requires Administrator privileges (needed for TUN device)
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "resources/manifest.xml"
