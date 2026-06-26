@@ -482,7 +482,7 @@ unsafe extern "system" fn dialog_proc(
             create_dialog_controls(hwnd);
 
             if matches!((*state_ptr).mode, DialogMode::Add) {
-                let _ = EnableWindow(GetDlgItem(hwnd, IDC_DLG_DELETE), false);
+                let _ = unsafe { EnableWindow(GetDlgItem(hwnd, IDC_DLG_DELETE), false) };
             }
 
             LRESULT(0)
@@ -521,7 +521,7 @@ unsafe extern "system" fn dialog_proc(
         WM_DESTROY => {
             let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut DialogState;
             if !state_ptr.is_null() {
-                let _ = EnableWindow((*state_ptr).parent, true);
+                let _ = unsafe { EnableWindow((*state_ptr).parent, true) };
                 let _ = Box::from_raw(state_ptr);
             }
             LRESULT(0)
@@ -536,7 +536,9 @@ pub fn open_server_editor(
     servers: &[StoredServer],
     selected_name: Option<String>,
 ) {
-    let _ = EnableWindow(parent, false);
+    unsafe {
+        let _ = EnableWindow(parent, false);
+    }
 
     let hinstance = unsafe {
         windows::Win32::System::LibraryLoader::GetModuleHandleW(None)

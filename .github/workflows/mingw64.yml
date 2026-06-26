@@ -25,12 +25,6 @@ jobs:
         shell: msys2 {0}
 
     steps:
-      - name: Install webview2 runtime
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile 'setup.exe'
-          Start-Process -FilePath setup.exe -Verb RunAs -Wait
-          
       - uses: msys2/setup-msys2@v2
         name: Setup MinGW64
         with:
@@ -73,20 +67,8 @@ jobs:
           pacboy: >-
             toolchain:p
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4.0.2
-        with:
-          node-version: ">=20"
-
       - name: Checkout
         uses: actions/checkout@v3
-
-      - name: Setup PNPM
-        uses: pnpm/action-setup@v3
-        with:
-          run_install: false
-          package_json_file: ./crates/openconnect-gui/package.json
-          version: 8
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -95,13 +77,6 @@ jobs:
           target: x86_64-pc-windows-gnu
           cache: true
 
-      - name: Build (Tauri)
-        run: |
-          rustup override set stable-x86_64-pc-windows-gnu
-          cd ./crates/openconnect-gui
-          pnpm install
-          pnpm tauri build
-
       - name: Build (Native)
         run: |
           rustup override set stable-x86_64-pc-windows-gnu
@@ -109,7 +84,6 @@ jobs:
           mkdir -p ./target/release/bundle/native
           cp ./target/release/openconnect-gui-win.exe ./target/release/bundle/native/
           cp ./wintun/wintun.dll ./target/release/bundle/native/ 2>/dev/null || true
-          cp ./crates/openconnect-gui/src-tauri/wintun.dll ./target/release/bundle/native/
 
       - name: Upload
         uses: actions/upload-artifact@v4.3.1
