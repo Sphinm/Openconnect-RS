@@ -17,7 +17,7 @@ use std::{
     },
 };
 use windows::Win32::{
-    Foundation::HWND,
+    Foundation::{HWND, LPARAM, WPARAM},
     UI::WindowsAndMessaging::PostMessageW,
 };
 
@@ -61,7 +61,7 @@ impl App {
         if let Ok(guard) = self.shared.hwnd.lock() {
             if let Some(hwnd) = *guard {
                 unsafe {
-                    let _ = PostMessageW(hwnd, WM_REFRESH_UI, None, None);
+                    let _ = PostMessageW(hwnd, WM_REFRESH_UI, WPARAM(0), LPARAM(0));
                 }
             }
         }
@@ -250,7 +250,7 @@ impl App {
             if let Ok(guard) = shared_for_state.hwnd.lock() {
                 if let Some(hwnd) = *guard {
                     unsafe {
-                        let _ = PostMessageW(hwnd, WM_REFRESH_UI, None, None);
+                        let _ = PostMessageW(hwnd, WM_REFRESH_UI, WPARAM(0), LPARAM(0));
                     }
                 }
             }
@@ -259,7 +259,7 @@ impl App {
             if let Ok(guard) = shared_for_cert.hwnd.lock() {
                 if let Some(hwnd) = *guard {
                     unsafe {
-                        let _ = PostMessageW(hwnd, WM_REFRESH_UI, None, None);
+                        let _ = PostMessageW(hwnd, WM_REFRESH_UI, WPARAM(0), LPARAM(0));
                     }
                 }
             }

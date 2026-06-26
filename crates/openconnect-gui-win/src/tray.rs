@@ -4,7 +4,7 @@ use std::sync::mpsc::Sender;
 use windows::{
     core::w,
     Win32::{
-        Foundation::{HWND, LPARAM},
+        Foundation::{HWND, LPARAM, WPARAM},
         UI::{
             Shell::{
                 self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
@@ -13,7 +13,7 @@ use windows::{
             WindowsAndMessaging::{
                 self, AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos,
                 PostMessageW, SetForegroundWindow, ShowWindow,
-                TrackPopupMenu, HICON, HMENU, MF_POPUP, MF_SEPARATOR, MF_STRING,
+                TrackPopupMenu, HICON, MF_POPUP, MF_SEPARATOR, MF_STRING,
                 SW_SHOW, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RETURNCMD,
                 WM_LBUTTONDBLCLK, WM_RBUTTONUP,
             },
@@ -21,7 +21,7 @@ use windows::{
     },
 };
 
-const WM_TRAY_NOTIFY: u32 = WindowsAndMessaging::WM_USER + 100;
+pub const WM_TRAY_NOTIFY: u32 = WindowsAndMessaging::WM_USER + 100;
 
 // Tray menu item IDs
 const IDM_SHOW: usize = 3001;
@@ -88,7 +88,7 @@ impl SystemTray {
         &self,
         servers: &[StoredServer],
         connected_server: Option<&str>,
-        connected: bool,
+        _connected: bool,
         cmd_tx: &Sender<Command>,
     ) {
         unsafe {
@@ -220,7 +220,7 @@ pub fn handle_tray_notify(
     tray: &mut Option<SystemTray>,
     servers: &[StoredServer],
     connected_server: Option<&str>,
-    connected: bool,
+    _connected: bool,
     cmd_tx: &Sender<Command>,
 ) {
     let event = (lparam.0 & 0xFFFF) as u32;

@@ -8,20 +8,32 @@ use windows::{
     core::{w, HSTRING, PCWSTR},
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
-        Graphics::Gdi::GetStockObject,
-        UI::{
-            Controls::{self, CBN_SELCHANGE},
-            WindowsAndMessaging::{
-                self, CreateWindowExW, DefWindowProcW, EnableWindow, GetDlgItem, GetWindowLongPtrW,
-                LoadCursorW, SendMessageW, SetWindowLongPtrW, SetWindowTextW, ShowWindow,
-                GWLP_USERDATA, IDC_ARROW, SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE,
-                WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_USER,
-                WS_BORDER, WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW,
-                WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
-            },
+        Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, WHITE_BRUSH},
+        UI::Input::KeyboardAndMouse::EnableWindow,
+        UI::WindowsAndMessaging::{
+            self, CreateWindowExW, DefWindowProcW, GetDlgItem, GetWindowLongPtrW,
+            LoadCursorW, SendMessageW, SetWindowLongPtrW, SetWindowTextW, ShowWindow,
+            GWLP_USERDATA, IDC_ARROW, SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE,
+            WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_USER,
+            WS_CHILD, WS_CLIPCHILDREN, WS_OVERLAPPEDWINDOW,
+            WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
         },
     },
 };
+
+// Use raw u32 values for Win32 constants not directly exposed in windows 0.54
+// These are stable ABI constants from the Windows SDK
+const STATIC_CLASS: u16 = 0xFFFF_u16; // WC_STATIC = 0xFFFF
+const BUTTON_CLASS: u16 = 0xFFF7_u16; // WC_BUTTON = 0xFFF7
+const COMBOBOX_CLASS: u16 = 0xFFF3_u16; // WC_COMBOBOX = 0xFFF3
+
+const CBS_DROPDOWNLIST: u32 = 0x0003;
+const CBN_SELCHANGE: u32 = 1;
+const CB_RESETCONTENT: u32 = 0x014B;
+const CB_ADDSTRING: u32 = 0x0143;
+const CB_SETCURSEL: u32 = 0x014E;
+const CB_GETCURSEL: u32 = 0x0147;
+const WM_SETFONT: u32 = 0x0030;
 
 // Control IDs
 const IDC_SERVER_COMBO: i32 = 1001;
@@ -54,12 +66,16 @@ pub struct WindowState {
     pub current_status: String,
 }
 
-/// Build an HSTRING from a format string.
 macro_rules! hformat {
     ($($arg:tt)*) => {{
         let s = format!($($arg)*);
         windows::core::HSTRING::from(s)
     }};
+}
+
+// Helper: make an atom class name as a null-terminated wide slice from a u16 pointer value
+unsafe fn atom_class(atom: u16) -> PCWSTR {
+    PCWSTR(atom as *const u16)
 }
 
 impl WindowState {
@@ -97,7 +113,7 @@ impl WindowState {
     fn update_server_combo(&self) {
         unsafe {
             let combo = GetDlgItem(self.hwnd, IDC_SERVER_COMBO);
-            let _ = SendMessageW(combo, Controls::CB_RESETCONTENT, None, None);
+            let _ = SendMessageW(combo, CB_RESETCONTENT, WPARAM(0), LPARAM(0));
 
             for server in &self.servers {
                 let name = match server {
@@ -107,9 +123,9 @@ impl WindowState {
                 let name_wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
                 let _ = SendMessageW(
                     combo,
-                    Controls::CB_ADDSTRING,
-                    None,
-                    Some(LPARAM(name_wide.as_ptr() as isize)),
+                    CB_ADDSTRING,
+                    WPARAM(0),
+                    LPARAM(name_wide.as_ptr() as isize),
                 );
             }
 
@@ -118,10 +134,10 @@ impl WindowState {
                     StoredServer::Oidc(s) => s.name == *selected,
                     StoredServer::Password(s) => s.name == *selected,
                 }) {
-                    let _ = SendMessageW(combo, Controls::CB_SETCURSEL, Some(WPARAM(idx)), None);
+                    let _ = SendMessageW(combo, CB_SETCURSEL, WPARAM(idx), LPARAM(0));
                 }
             } else if !self.servers.is_empty() {
-                let _ = SendMessageW(combo, Controls::CB_SETCURSEL, Some(WPARAM(0)), None);
+                let _ = SendMessageW(combo, CB_SETCURSEL, WPARAM(0), LPARAM(0));
             }
         }
     }
@@ -201,7 +217,7 @@ impl WindowState {
     fn handle_combo_change(&mut self) {
         unsafe {
             let combo = GetDlgItem(self.hwnd, IDC_SERVER_COMBO);
-            let idx = SendMessageW(combo, Controls::CB_GETCURSEL, None, None).0;
+            let idx = SendMessageW(combo, CB_GETCURSEL, WPARAM(0), LPARAM(0)).0;
             if idx >= 0 && (idx as usize) < self.servers.len() {
                 let name = match &self.servers[idx as usize] {
                     StoredServer::Oidc(s) => s.name.clone(),
@@ -244,15 +260,10 @@ impl WindowState {
     }
 }
 
-/// Helper to create a null-terminated UTF-16 Vec from a string.
-fn to_utf16(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
 fn create_child(
     parent: HWND,
-    class: &[u16],
-    text: &[u16],
+    class_atom: u16,
+    text: PCWSTR,
     id: i32,
     x: i32,
     y: i32,
@@ -263,96 +274,89 @@ fn create_child(
     unsafe {
         CreateWindowExW(
             WINDOW_EX_STYLE(0),
-            PCWSTR::from_raw(class.as_ptr()),
-            PCWSTR::from_raw(text.as_ptr()),
+            atom_class(class_atom),
+            text,
             style | WS_CHILD | WS_VISIBLE,
             x,
             y,
             w,
             h,
             parent,
-            Some(WindowsAndMessaging::HMENU(id as usize)),
+            WindowsAndMessaging::HMENU(id as isize),
             None,
             None,
         )
     }
 }
 
-fn create_controls(hwnd: HWND) {
-    let font = unsafe { Controls::GetStockObject(Controls::DEFAULT_GUI_FONT) };
+fn set_font(hwnd: HWND) {
+    unsafe {
+        let font = GetStockObject(DEFAULT_GUI_FONT);
+        let _ = SendMessageW(hwnd, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(0));
+    }
+}
 
+fn create_controls(hwnd: HWND) {
     // Status bar
     let status = create_child(
-        hwnd,
-        Controls::STATIC,
-        w!("Disconnected"),
-        IDC_STATUS_LABEL,
-        10, 5, 500, 25,
+        hwnd, STATIC_CLASS, w!("Disconnected"),
+        IDC_STATUS_LABEL, 10, 5, 500, 25,
         WINDOW_STYLE(0),
     );
-    unsafe { let _ = SendMessageW(status, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    set_font(status);
 
     // === Disconnected panel ===
     let p1 = create_child(
-        hwnd,
-        Controls::STATIC,
-        w!(""),
-        IDC_PANEL_DISCONNECTED,
-        10, 40, 680, 450,
+        hwnd, STATIC_CLASS, w!(""),
+        IDC_PANEL_DISCONNECTED, 10, 40, 680, 450,
         WINDOW_STYLE(0),
     );
 
-    create_child(p1, Controls::STATIC, w!("Server:"), 0, 15, 12, 55, 25, WINDOW_STYLE(0));
+    create_child(p1, STATIC_CLASS, w!("Server:"), 0, 15, 12, 55, 25, WINDOW_STYLE(0));
 
     let combo = create_child(
-        p1,
-        Controls::COMBOBOX,
-        w!(""),
-        IDC_SERVER_COMBO,
-        75, 10, 350, 200,
-        Controls::CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
+        p1, COMBOBOX_CLASS, w!(""),
+        IDC_SERVER_COMBO, 75, 10, 350, 200,
+        WINDOW_STYLE(CBS_DROPDOWNLIST) | WS_VSCROLL | WS_TABSTOP,
     );
-    unsafe { let _ = SendMessageW(combo, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    set_font(combo);
 
     let manage = create_child(
-        p1,
-        Controls::BUTTON,
-        w!("Manage Servers"),
-        IDC_MANAGE_BTN,
-        435, 9, 120, 28,
+        p1, BUTTON_CLASS, w!("Manage Servers"),
+        IDC_MANAGE_BTN, 435, 9, 120, 28,
         WS_TABSTOP,
     );
-    unsafe { let _ = SendMessageW(manage, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    set_font(manage);
 
-    let st = create_child(p1, Controls::STATIC, w!(""), IDC_SERVER_TYPE_LABEL, 15, 55, 400, 22, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(st, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    let st = create_child(p1, STATIC_CLASS, w!(""), IDC_SERVER_TYPE_LABEL, 15, 55, 400, 22, WINDOW_STYLE(0));
+    set_font(st);
+    let su = create_child(p1, STATIC_CLASS, w!(""), IDC_SERVER_URL_LABEL, 15, 82, 650, 22, WINDOW_STYLE(0));
+    set_font(su);
+    let se = create_child(p1, STATIC_CLASS, w!(""), IDC_SERVER_EXTRA_LABEL, 15, 109, 650, 22, WINDOW_STYLE(0));
+    set_font(se);
 
-    let su = create_child(p1, Controls::STATIC, w!(""), IDC_SERVER_URL_LABEL, 15, 82, 650, 22, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(su, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
-
-    let se = create_child(p1, Controls::STATIC, w!(""), IDC_SERVER_EXTRA_LABEL, 15, 109, 650, 22, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(se, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
-
-    let btn = create_child(p1, Controls::BUTTON, w!("Connect"), IDC_CONNECT_BTN, 250, 160, 200, 35, WS_TABSTOP);
-    unsafe {
-        let _ = SendMessageW(btn, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None);
-        let _ = EnableWindow(btn, false);
-    }
+    let btn = create_child(
+        p1, BUTTON_CLASS, w!("Connect"),
+        IDC_CONNECT_BTN, 250, 160, 200, 35,
+        WS_TABSTOP,
+    );
+    set_font(btn);
+    unsafe { let _ = EnableWindow(btn, false); }
 
     // === Connecting panel ===
-    let p2 = create_child(hwnd, Controls::STATIC, w!(""), IDC_PANEL_CONNECTING, 10, 40, 680, 450, WINDOW_STYLE(0));
-    let ct = create_child(p2, Controls::STATIC, w!("Connecting..."), IDC_PANEL_CONNECTING_TEXT, 50, 80, 580, 60, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(ct, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    let p2 = create_child(hwnd, STATIC_CLASS, w!(""), IDC_PANEL_CONNECTING, 10, 40, 680, 450, WINDOW_STYLE(0));
+    let ct = create_child(p2, STATIC_CLASS, w!("Connecting..."), IDC_PANEL_CONNECTING_TEXT, 50, 80, 580, 60, WINDOW_STYLE(0));
+    set_font(ct);
 
     // === Connected panel ===
-    let p3 = create_child(hwnd, Controls::STATIC, w!(""), IDC_PANEL_CONNECTED, 10, 40, 680, 450, WINDOW_STYLE(0));
-    let cd = create_child(p3, Controls::STATIC, w!("Connected"), IDC_PANEL_CONNECTED_TEXT, 50, 80, 580, 60, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(cd, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    let p3 = create_child(hwnd, STATIC_CLASS, w!(""), IDC_PANEL_CONNECTED, 10, 40, 680, 450, WINDOW_STYLE(0));
+    let cd = create_child(p3, STATIC_CLASS, w!("Connected"), IDC_PANEL_CONNECTED_TEXT, 50, 80, 580, 60, WINDOW_STYLE(0));
+    set_font(cd);
 
     // === Error panel ===
-    let p4 = create_child(hwnd, Controls::STATIC, w!(""), IDC_PANEL_ERROR, 10, 40, 680, 450, WINDOW_STYLE(0));
-    let et = create_child(p4, Controls::STATIC, w!(""), IDC_PANEL_ERROR_TEXT, 50, 80, 580, 100, WINDOW_STYLE(0));
-    unsafe { let _ = SendMessageW(et, Controls::WM_SETFONT, Some(WPARAM(font.0 as usize)), None); }
+    let p4 = create_child(hwnd, STATIC_CLASS, w!(""), IDC_PANEL_ERROR, 10, 40, 680, 450, WINDOW_STYLE(0));
+    let et = create_child(p4, STATIC_CLASS, w!(""), IDC_PANEL_ERROR_TEXT, 50, 80, 580, 100, WINDOW_STYLE(0));
+    set_font(et);
 
     // Hide non-default panels
     unsafe {
@@ -375,7 +379,6 @@ pub unsafe extern "system" fn window_proc(
             let _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
 
             create_controls(hwnd);
-
             let _ = (*state_ptr).cmd_tx.send(Command::GetConfigs);
 
             LRESULT(0)
@@ -390,7 +393,7 @@ pub unsafe extern "system" fn window_proc(
             let notify = ((wparam.0 >> 16) & 0xFFFF) as u32;
 
             match ctrl_id {
-                IDC_SERVER_COMBO if notify == CBN_SELCHANGE.0 => {
+                IDC_SERVER_COMBO if notify == CBN_SELCHANGE => {
                     state.handle_combo_change();
                 }
                 IDC_CONNECT_BTN => {
@@ -423,9 +426,10 @@ pub unsafe extern "system" fn window_proc(
                             state.set_status_text(&status, message.as_deref());
                             match status.as_str() {
                                 "CONNECTING" => {
-                                    let txt: HSTRING =
-                                        format!("Connecting...\n{}", message.as_deref().unwrap_or(""))
-                                            .into();
+                                    let txt: HSTRING = format!(
+                                        "Connecting...\n{}",
+                                        message.as_deref().unwrap_or("")
+                                    ).into();
                                     unsafe {
                                         let _ = SetWindowTextW(
                                             GetDlgItem(hwnd, IDC_PANEL_CONNECTING_TEXT),
@@ -440,9 +444,7 @@ pub unsafe extern "system" fn window_proc(
                                     state.set_connected_text("Connected to VPN");
                                 }
                                 "ERROR" => {
-                                    state.set_error_text(
-                                        message.as_deref().unwrap_or("Unknown error"),
-                                    );
+                                    state.set_error_text(message.as_deref().unwrap_or("Unknown error"));
                                 }
                                 _ => {}
                             }
@@ -496,15 +498,16 @@ pub fn create_main_window(
 ) -> HWND {
     let hinstance = unsafe {
         windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
-            .unwrap_or(windows::Win32::Foundation::HMODULE(std::ptr::null_mut()))
+            .map(|m| m.0)
+            .unwrap_or(0)
     };
 
-    let wc = WNDCLASSW {
+    let wc = WindowsAndMessaging::WNDCLASSW {
         style: WindowsAndMessaging::CS_HREDRAW | WindowsAndMessaging::CS_VREDRAW,
         lpfnWndProc: Some(window_proc),
-        hInstance: windows::Win32::Foundation::HINSTANCE(hinstance.0),
+        hInstance: windows::Win32::Foundation::HINSTANCE(hinstance),
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap() },
-        hbrBackground: unsafe { GetStockObject(Controls::WHITE_BRUSH) },
+        hbrBackground: unsafe { GetStockObject(WHITE_BRUSH) },
         lpszClassName: w!("OpenConnectVPNWin"),
         hIcon: icon,
         ..Default::default()
@@ -515,7 +518,7 @@ pub fn create_main_window(
     }
 
     let state = Box::new(WindowState {
-        hwnd: HWND(std::ptr::null_mut()),
+        hwnd: HWND(0),
         cmd_tx: cmd_tx.clone(),
         event_rx: Mutex::new(event_rx),
         servers: Vec::new(),
@@ -537,7 +540,7 @@ pub fn create_main_window(
             WINDOW_HEIGHT,
             None,
             None,
-            hinstance,
+            windows::Win32::Foundation::HINSTANCE(hinstance),
             Some(state_ptr as *mut std::ffi::c_void),
         )
     };

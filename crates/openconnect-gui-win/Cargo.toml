@@ -13,7 +13,14 @@ path = "src/main.rs"
 [dependencies]
 openconnect-core = { path = "../openconnect-core", version = "0.1.5" }
 openconnect-oidc = { path = "../openconnect-oidc", version = "0.1.5" }
-windows = { workspace = true, features = ["Win32_UI_Controls", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Ole"] }
+windows = { workspace = true, features = [
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

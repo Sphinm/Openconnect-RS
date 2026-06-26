@@ -6,25 +6,20 @@ mod message;
 mod tray;
 mod window;
 
+use crate::app::SharedState;
 use crate::message::{Command, Event};
 use crate::tray::SystemTray;
-use crate::window::{self, create_main_window};
+use crate::window::create_main_window;
 use openconnect_core::storage::StoredConfigs;
 use std::sync::{mpsc, Arc, Mutex};
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM},
         UI::WindowsAndMessaging::{
             self, DispatchMessageW, GetMessageW, GetWindowLongPtrW, LoadIconW,
             ShowWindow, TranslateMessage, GWLP_USERDATA, HICON, IDI_APPLICATION, SW_SHOW,
         },
     },
 };
-
-/// Shared handle so the background thread can post UI refresh messages.
-struct SharedState {
-    hwnd: Mutex<Option<HWND>>,
-}
 
 fn main() {
     // 1. UAC elevation
@@ -65,11 +60,10 @@ fn main() {
 
     // 5. Spawn tokio runtime on background thread
     let shared_bg = shared.clone();
-    let event_tx_bg = event_tx.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         rt.block_on(async {
-            let mut app = app::App::new(cmd_rx, event_tx_bg, config_file, shared_bg)
+            let mut app = app::App::new(cmd_rx, event_tx, config_file, shared_bg)
                 .expect("Failed to create app state");
             app.run().await;
         });
@@ -117,6 +111,10 @@ fn main() {
                     let current_servers = state.servers.clone();
                     let current_selected = state.selected_server.clone();
                     let is_connected = state.current_status == "CONNECTED";
+
+                    if let Some(ref mut t) = tray {
+                        t.set_connected(is_connected);
+                    }
 
                     crate::tray::handle_tray_notify(
                         hwnd,
