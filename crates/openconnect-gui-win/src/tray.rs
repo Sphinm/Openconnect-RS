@@ -50,15 +50,12 @@ impl SystemTray {
         nid.hIcon = icon_disconnected;
 
         // Set tooltip
-        let tip: Vec<u16> = "OpenConnect VPN\0".encode_utf16().collect();
-        let tip_bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                tip.as_ptr() as *const u8,
-                tip.len() * 2,
-            )
-        };
-        let max_len = nid.szTip.len().min(tip_bytes.len());
-        nid.szTip[..max_len].copy_from_slice(&tip_bytes[..max_len]);
+        let tip: Vec<u16> = "OpenConnect VPN"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let copy_len = nid.szTip.len().min(tip.len());
+        nid.szTip[..copy_len].copy_from_slice(&tip[..copy_len]);
 
         unsafe {
             let _ = Shell::Shell_NotifyIconW(NIM_ADD, &nid);
@@ -227,7 +224,7 @@ pub fn handle_tray_notify(
 
     if event == WM_RBUTTONUP || event == WindowsAndMessaging::WM_CONTEXTMENU {
         if let Some(ref tray) = tray {
-            tray.show_menu(servers, connected_server, connected, cmd_tx);
+            tray.show_menu(servers, connected_server, _connected, cmd_tx);
         }
     } else if event == WM_LBUTTONDBLCLK {
         unsafe {

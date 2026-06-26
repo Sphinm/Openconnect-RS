@@ -8,7 +8,7 @@ use windows::{
     core::{w, HSTRING, PCWSTR},
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
-        Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, WHITE_BRUSH},
+        Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, HBRUSH, WHITE_BRUSH},
         UI::Input::KeyboardAndMouse::EnableWindow,
         UI::WindowsAndMessaging::{
             self, CreateWindowExW, DefWindowProcW, GetDlgItem, GetWindowLongPtrW,
@@ -507,7 +507,7 @@ pub fn create_main_window(
         lpfnWndProc: Some(window_proc),
         hInstance: windows::Win32::Foundation::HINSTANCE(hinstance),
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap() },
-        hbrBackground: unsafe { GetStockObject(WHITE_BRUSH) },
+        hbrBackground: HBRUSH(unsafe { GetStockObject(WHITE_BRUSH).0 }),
         lpszClassName: w!("OpenConnectVPNWin"),
         hIcon: icon,
         ..Default::default()

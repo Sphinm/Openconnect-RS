@@ -5,7 +5,7 @@ use windows::{
     core::{w, HSTRING, PCWSTR},
     Win32::{
         Foundation::{HWND, HGLOBAL, LPARAM, LRESULT, WPARAM},
-        Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, WHITE_BRUSH},
+        Graphics::Gdi::{GetStockObject, DEFAULT_GUI_FONT, HBRUSH, WHITE_BRUSH},
         System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard},
         System::Memory::{GlobalLock, GlobalUnlock},
         UI::Input::KeyboardAndMouse::EnableWindow,
@@ -549,7 +549,7 @@ pub fn open_server_editor(
         lpfnWndProc: Some(dialog_proc),
         hInstance: windows::Win32::Foundation::HINSTANCE(hinstance),
         hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap() },
-        hbrBackground: unsafe { GetStockObject(WHITE_BRUSH) },
+        hbrBackground: HBRUSH(unsafe { GetStockObject(WHITE_BRUSH).0 }),
         lpszClassName: w!("OpenConnectVPNDialog"),
         ..Default::default()
     };
