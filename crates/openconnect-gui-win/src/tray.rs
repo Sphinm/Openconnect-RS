@@ -127,7 +127,7 @@ impl SystemTray {
             let servers_label: Vec<u16> = "Servers\0".encode_utf16().collect();
             let _ = AppendMenuW(
                 menu,
-                MF_STRING | Shell::MF_POPUP,
+                MF_STRING | MF_POPUP,
                 servers_menu.0 as usize,
                 windows::core::PCWSTR::from_raw(servers_label.as_ptr()),
             );

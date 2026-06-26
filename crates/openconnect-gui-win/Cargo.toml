@@ -22,4 +22,4 @@ home = { workspace = true }
 open = "5.1.2"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-embed_resource = "2.4"
+embed-resource = "2.4"

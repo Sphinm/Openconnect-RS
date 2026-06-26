@@ -2,18 +2,18 @@ use crate::message::Command;
 use openconnect_core::storage::{OidcServer, PasswordServer, StoredServer};
 use std::sync::mpsc::Sender;
 use windows::{
-    core::{w, PCWSTR},
+    core::{w, HSTRING, PCWSTR},
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         UI::{
-            Controls::{self},
+            Controls::{self, CBN_SELCHANGE},
             WindowsAndMessaging::{
                 self, CreateWindowExW, DefWindowProcW, DestroyWindow, EnableWindow,
                 GetDlgItem, GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW,
                 LoadCursorW, MessageBoxW, SendMessageW, SetWindowLongPtrW, SetWindowTextW,
                 GWLP_USERDATA, IDC_ARROW, MB_ICONQUESTION, MB_OKCANCEL, MB_YESNO,
                 SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WINDOW_STYLE,
-                WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_USER,
+                WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY,
                 WS_BORDER, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN,
                 WS_POPUP, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
             },
@@ -75,8 +75,8 @@ impl DialogState {
     fn set_text(&self, id: i32, text: &str) {
         unsafe {
             let hwnd = GetDlgItem(self.hwnd, id);
-            let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-            let _ = SetWindowTextW(hwnd, PCWSTR::from_raw(wide.as_ptr()));
+            let s: HSTRING = text.into();
+            let _ = SetWindowTextW(hwnd, &s);
         }
     }
 
@@ -191,12 +191,15 @@ impl DialogState {
 
     fn on_delete(&self) {
         if let DialogMode::Edit { ref name } = self.mode {
-            let msg = format!("Are you sure you want to delete server '{}'?", name);
-            let wide: Vec<u16> = msg.encode_utf16().chain(std::iter::once(0)).collect();
+            let msg: HSTRING = format!(
+                "Are you sure you want to delete server '{}'?",
+                name
+            )
+            .into();
             let result = unsafe {
                 MessageBoxW(
                     self.hwnd,
-                    PCWSTR::from_raw(wide.as_ptr()),
+                    &msg,
                     w!("Confirm Delete"),
                     MB_YESNO | MB_ICONQUESTION,
                 )

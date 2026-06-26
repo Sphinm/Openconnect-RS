@@ -5,7 +5,7 @@ use std::sync::{
     Mutex,
 };
 use windows::{
-    core::{w, PCWSTR},
+    core::{w, HSTRING, PCWSTR},
     Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         Graphics::Gdi::GetStockObject,
@@ -54,6 +54,14 @@ pub struct WindowState {
     pub current_status: String,
 }
 
+/// Build an HSTRING from a format string.
+macro_rules! hformat {
+    ($($arg:tt)*) => {{
+        let s = format!($($arg)*);
+        windows::core::HSTRING::from(s)
+    }};
+}
+
 impl WindowState {
     fn refresh_ui(&self) {
         let is_idle = matches!(
@@ -65,7 +73,6 @@ impl WindowState {
         let is_connected = self.current_status == "CONNECTED";
 
         unsafe {
-            // Show/hide panels
             ShowWindow(GetDlgItem(self.hwnd, IDC_PANEL_DISCONNECTED), if is_idle { SW_SHOW } else { SW_HIDE });
             ShowWindow(GetDlgItem(self.hwnd, IDC_PANEL_CONNECTING), if is_connecting { SW_SHOW } else { SW_HIDE });
             ShowWindow(GetDlgItem(self.hwnd, IDC_PANEL_CONNECTED), if is_connected { SW_SHOW } else { SW_HIDE });
@@ -74,7 +81,6 @@ impl WindowState {
                 if self.current_status == "ERROR" { SW_SHOW } else { SW_HIDE },
             );
 
-            // Update connect button
             let btn = GetDlgItem(self.hwnd, IDC_CONNECT_BTN);
             if is_connected {
                 let _ = SetWindowTextW(btn, w!("Disconnect"));
@@ -136,17 +142,17 @@ impl WindowState {
             match server {
                 Some(StoredServer::Password(s)) => {
                     let _ = SetWindowTextW(type_label, w!("Type: Password"));
-                    let _ =
-                        SetWindowTextW(url_label, &to_utf16(format!("Server: {}", s.server)));
-                    let _ =
-                        SetWindowTextW(extra_label, &to_utf16(format!("Username: {}", s.username)));
+                    let url = hformat!("Server: {}", s.server);
+                    let extra = hformat!("Username: {}", s.username);
+                    let _ = SetWindowTextW(url_label, &url);
+                    let _ = SetWindowTextW(extra_label, &extra);
                 }
                 Some(StoredServer::Oidc(s)) => {
                     let _ = SetWindowTextW(type_label, w!("Type: OIDC"));
-                    let _ =
-                        SetWindowTextW(url_label, &to_utf16(format!("Server: {}", s.server)));
-                    let _ =
-                        SetWindowTextW(extra_label, &to_utf16(format!("Issuer: {}", s.issuer)));
+                    let url = hformat!("Server: {}", s.server);
+                    let extra = hformat!("Issuer: {}", s.issuer);
+                    let _ = SetWindowTextW(url_label, &url);
+                    let _ = SetWindowTextW(extra_label, &extra);
                 }
                 None => {
                     let _ = SetWindowTextW(type_label, w!(""));
@@ -160,32 +166,35 @@ impl WindowState {
     fn set_status_text(&self, status: &str, message: Option<&str>) {
         unsafe {
             let label = GetDlgItem(self.hwnd, IDC_STATUS_LABEL);
-            let text = match message {
-                Some(msg) => format!("{}: {}", status, msg),
-                None => status.to_string(),
+            let text: HSTRING = match message {
+                Some(msg) => format!("{}: {}", status, msg).into(),
+                None => status.into(),
             };
-            let _ = SetWindowTextW(label, &to_utf16(text));
+            let _ = SetWindowTextW(label, &text);
         }
     }
 
     fn set_connecting_text(&self, text: &str) {
         unsafe {
             let label = GetDlgItem(self.hwnd, IDC_PANEL_CONNECTING_TEXT);
-            let _ = SetWindowTextW(label, &to_utf16(text));
+            let t: HSTRING = text.into();
+            let _ = SetWindowTextW(label, &t);
         }
     }
 
     fn set_connected_text(&self, text: &str) {
         unsafe {
             let label = GetDlgItem(self.hwnd, IDC_PANEL_CONNECTED_TEXT);
-            let _ = SetWindowTextW(label, &to_utf16(text));
+            let t: HSTRING = text.into();
+            let _ = SetWindowTextW(label, &t);
         }
     }
 
     fn set_error_text(&self, text: &str) {
         unsafe {
             let label = GetDlgItem(self.hwnd, IDC_PANEL_ERROR_TEXT);
-            let _ = SetWindowTextW(label, &to_utf16(text));
+            let t: HSTRING = text.into();
+            let _ = SetWindowTextW(label, &t);
         }
     }
 
@@ -235,8 +244,9 @@ impl WindowState {
     }
 }
 
-fn to_utf16(s: impl AsRef<str>) -> Vec<u16> {
-    s.as_ref().encode_utf16().chain(std::iter::once(0)).collect()
+/// Helper to create a null-terminated UTF-16 Vec from a string.
+fn to_utf16(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn create_child(
@@ -366,7 +376,6 @@ pub unsafe extern "system" fn window_proc(
 
             create_controls(hwnd);
 
-            // Request initial configs
             let _ = (*state_ptr).cmd_tx.send(Command::GetConfigs);
 
             LRESULT(0)
@@ -414,10 +423,15 @@ pub unsafe extern "system" fn window_proc(
                             state.set_status_text(&status, message.as_deref());
                             match status.as_str() {
                                 "CONNECTING" => {
-                                    state.set_connecting_text(&format!(
-                                        "Connecting...\n{}",
-                                        message.as_deref().unwrap_or("")
-                                    ));
+                                    let txt: HSTRING =
+                                        format!("Connecting...\n{}", message.as_deref().unwrap_or(""))
+                                            .into();
+                                    unsafe {
+                                        let _ = SetWindowTextW(
+                                            GetDlgItem(hwnd, IDC_PANEL_CONNECTING_TEXT),
+                                            &txt,
+                                        );
+                                    }
                                 }
                                 "DISCONNECTING" => {
                                     state.set_connecting_text("Disconnecting...");
@@ -426,7 +440,9 @@ pub unsafe extern "system" fn window_proc(
                                     state.set_connected_text("Connected to VPN");
                                 }
                                 "ERROR" => {
-                                    state.set_error_text(message.as_deref().unwrap_or("Unknown error"));
+                                    state.set_error_text(
+                                        message.as_deref().unwrap_or("Unknown error"),
+                                    );
                                 }
                                 _ => {}
                             }
@@ -458,7 +474,6 @@ pub unsafe extern "system" fn window_proc(
             LRESULT(0)
         }
         WM_CLOSE => {
-            // Hide to tray instead of closing
             let _ = ShowWindow(hwnd, SW_HIDE);
             LRESULT(0)
         }

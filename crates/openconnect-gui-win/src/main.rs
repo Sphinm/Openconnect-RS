@@ -15,7 +15,7 @@ use windows::{
     Win32::{
         Foundation::{HWND, LPARAM},
         UI::WindowsAndMessaging::{
-            self, DispatchMessageW, GetMessageW, LoadIconW, SetWindowLongPtrW,
+            self, DispatchMessageW, GetMessageW, GetWindowLongPtrW, LoadIconW,
             ShowWindow, TranslateMessage, GWLP_USERDATA, HICON, IDI_APPLICATION, SW_SHOW,
         },
     },
@@ -110,9 +110,7 @@ fn main() {
 
             // Check for our custom tray notification before dispatching
             if msg.message == crate::tray::WM_TRAY_NOTIFY {
-                let state_ptr = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0) as *mut window::WindowState;
-                // Put it back
-                let _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
+                let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut window::WindowState;
 
                 if !state_ptr.is_null() {
                     let state = &*state_ptr;
